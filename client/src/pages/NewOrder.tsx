@@ -12,7 +12,6 @@ interface Entry { boxes: number; perBox: number; qty: number }
 const num = (v: string) => Math.max(0, Math.floor(Number(v) || 0));
 const ml = (s: string) => { const m = s.match(/([\d.]+)\s*(ltr|litre|liter|l)\b/i); return m ? parseFloat(m[1]) * 1000 : parseFloat(s) || 0; };
 const noEntry: Entry = { boxes: 0, perBox: 0, qty: 0 };
-const KNOWN_BRANDS = ["LS", "Aruna", "Asignah", "GIO", "Elite"]; // always shown as brand filters
 
 export default function NewOrder() {
   const { id } = useParams(); const nav = useNavigate();
@@ -27,7 +26,8 @@ export default function NewOrder() {
   useEffect(() => { api<Product[]>("/products").then(setProducts).catch((e) => toast.error(e.message)); }, []);
   useEffect(() => { api<Customer[]>("/customers").then(setCustomers).catch(() => {}); }, []);
   const cats = useMemo(() => [...new Set(products.map((p) => p.category))].sort(), [products]);
-  const brands = useMemo(() => [...KNOWN_BRANDS, ...[...new Set(products.map((p) => p.brand))].filter((b) => !KNOWN_BRANDS.includes(b)).sort()], [products]); // fixed brands first, then any other brand in the data
+  useEffect(() => { if (!category && !id && cats.length) setCategory(cats[0]); }, [cats]);
+  const brands = useMemo(() => [...new Set(products.filter((p) => p.category === category).map((p) => p.brand))].sort(), [products, category]); // brands that exist in this category
   useEffect(() => { // edit mode: load the order into the form
     if (!id || !products.length) return;
     api<Order>(`/orders/${id}`).then((o) => {
@@ -43,8 +43,8 @@ export default function NewOrder() {
   const rows = useMemo(() => {
     const t = search.trim().toLowerCase();
     return products
-      .filter((p) => (!category || p.category === category) && (!brand || p.brand === brand) && (!t || `${p.brand} ${p.name} ${p.measurement}`.toLowerCase().includes(t)))
-      .sort((a, b) => a.category.localeCompare(b.category) || a.brand.localeCompare(b.brand) || a.name.localeCompare(b.name) || ml(a.measurement) - ml(b.measurement));
+      .filter((p) => p.category === category && (!brand || p.brand === brand) && (!t || `${p.brand} ${p.name} ${p.measurement}`.toLowerCase().includes(t)))
+      .sort((a, b) => a.brand.localeCompare(b.brand) || a.name.localeCompare(b.name) || ml(a.measurement) - ml(b.measurement));
   }, [products, category, brand, search]);
   const setEntry = (pid: string, patch: Partial<Entry>) => setEntries((prev) => {
     const next = { ...(prev[pid] || noEntry), ...patch };
@@ -109,50 +109,32 @@ export default function NewOrder() {
         <CardContent className="space-y-4">
           <div className="space-y-3">
             <div className="space-y-2"><Label>Category</Label>
-              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 md:flex-wrap">
-                <Button type="button" className="shrink-0" variant={!category ? "default" : "outline"} onClick={() => setCategory("")}>All</Button>
+              <div className="flex flex-wrap gap-2">
                 {cats.map((c) => { const n = chosen.filter(({ p }) => p.category === c).length; return (
-                  <Button key={c} className="shrink-0" type="button" variant={c === category ? "default" : "outline"} onClick={() => setCategory(c)}>{c}{n > 0 && <span className="ml-2 rounded-full bg-background/20 px-2 text-xs">{n}</span>}</Button>); })}
+                  <Button key={c} type="button" variant={c === category ? "default" : "outline"} onClick={() => { setCategory(c); setBrand(""); }}>{c}{n > 0 && <span className="ml-2 rounded-full bg-background/20 px-2 text-xs">{n}</span>}</Button>); })}
                 {!cats.length && <span className="text-sm text-muted-foreground">No products yet. Ask admin to add products.</span>}
               </div></div>
             <div className="space-y-2"><Label>Brand</Label>
-              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 md:flex-wrap">
-                <Button type="button" size="sm" className="shrink-0" variant={!brand ? "default" : "outline"} onClick={() => setBrand("")}>All brands</Button>
-                {brands.map((b) => { const n = chosen.filter(({ p }) => p.brand === b).length; return (
-                  <Button key={b} className="shrink-0" type="button" size="sm" variant={b === brand ? "default" : "outline"} onClick={() => setBrand(b)}>{b === "Generic" ? "No brand" : b}{n > 0 && <span className="ml-2 rounded-full bg-background/20 px-2 text-xs">{n}</span>}</Button>); })}
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant={!brand ? "default" : "outline"} onClick={() => setBrand("")}>All brands</Button>
+                {brands.map((b) => { const n = chosen.filter(({ p }) => p.category === category && p.brand === b).length; return (
+                  <Button key={b} type="button" size="sm" variant={b === brand ? "default" : "outline"} onClick={() => setBrand(b)}>{b === "Generic" ? "No brand" : b}{n > 0 && <span className="ml-2 rounded-full bg-background/20 px-2 text-xs">{n}</span>}</Button>); })}
               </div></div>
+              
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-2"><Label htmlFor="f-search">Search product</Label>
                 <Input id="f-search" className="w-64" placeholder="Name or size, e.g. zinc, 1 ltr" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
-              {(category || brand || search) && <Button type="button" variant="ghost" onClick={() => { setCategory(""); setBrand(""); setSearch(""); }}>Clear filters</Button>}
-              <span className="pb-2 text-xs text-muted-foreground">Showing {rows.length} of {products.length} products</span>
+              {(brand || search) && <Button type="button" variant="ghost" onClick={() => { setBrand(""); setSearch(""); }}>Clear filters</Button>}
+              <span className="pb-2 text-xs text-muted-foreground">Showing {rows.length} of {products.filter((p) => p.category === category).length} products</span>
             </div>
             <p className="text-xs text-muted-foreground">Enter box qty × per box qty (order qty fills itself), or type the order qty directly. Leave a row empty to skip it.</p></div>
-          <div className="space-y-3 md:hidden">
-            {rows.length === 0 && <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">No products match the filters</p>}
-            {rows.map((p) => { const e = entries[p._id] || noEntry; const out = !id && p.stock < 1; const over = !id && e.qty > p.stock; return (
-              <div key={p._id} className={`rounded-xl border bg-card p-3 ${out ? "opacity-60" : ""} ${e.qty > 0 ? "border-primary ring-1 ring-primary/40" : ""}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div><div className="text-xs text-muted-foreground">{!category && `${p.category}, `}{p.brand === "Generic" ? "No brand" : p.brand}</div>
-                    <div className="font-medium leading-snug">{p.name}</div><div className="text-sm text-muted-foreground">{p.measurement}</div></div>
-                  <div className="text-right"><div className="font-semibold">{inr(p.price)}</div><div className={`text-xs ${out ? "text-destructive" : "text-muted-foreground"}`}>{out ? "Out of stock" : `${p.stock} in stock`}</div></div>
-                </div>
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  {([["boxes", "Box qty"], ["perBox", "Per box"], ["qty", "Order qty"]] as const).map(([k, label]) => (
-                    <label key={k} className="space-y-1 text-xs text-muted-foreground">{label}
-                      <Input className={`h-11 text-foreground ${k === "qty" && over ? "border-destructive" : ""}`} type="number" inputMode="numeric" min={0} disabled={out}
-                        value={e[k] || (k === "perBox" ? p.perBox : 0) || ""} onChange={(ev) => setEntry(p._id, { [k]: num(ev.target.value) })} /></label>))}
-                </div>
-                {e.qty > 0 && <div className="mt-2 text-right text-sm font-medium">{inr(e.qty * p.price)}</div>}
-              </div>); })}
-          </div>
-          <div className="hidden overflow-x-auto rounded-md border md:block"><Table>
-            <TableHeader><TableRow>{!category && <TableHead>Category</TableHead>}<TableHead>Brand</TableHead><TableHead>Product name</TableHead><TableHead>Measurement</TableHead><TableHead className="text-right">Rate</TableHead><TableHead className="text-right">Stock</TableHead><TableHead>Box qty</TableHead><TableHead>Per box qty</TableHead><TableHead>Order qty</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
+          <div className="overflow-x-auto rounded-md border"><Table>
+            <TableHeader><TableRow><TableHead>Brand</TableHead><TableHead>Product name</TableHead><TableHead>Measurement</TableHead><TableHead className="text-right">Rate</TableHead><TableHead className="text-right">Stock</TableHead><TableHead>Box qty</TableHead><TableHead>Per box qty</TableHead><TableHead>Order qty</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
             <TableBody>
-              {rows.length === 0 && <TableRow><TableCell colSpan={category ? 9 : 10} className="h-20 text-center text-muted-foreground">No products match the filters</TableCell></TableRow>}
+              {rows.length === 0 && <TableRow><TableCell colSpan={9} className="h-20 text-center text-muted-foreground">No products match the filters</TableCell></TableRow>}
               {rows.map((p) => { const e = entries[p._id] || noEntry; const out = !id && p.stock < 1; const over = !id && e.qty > p.stock; return (
                 <TableRow key={p._id} className={out ? "opacity-50" : ""}>
-                  {!category && <TableCell>{p.category}</TableCell>}<TableCell>{p.brand === "Generic" ? "—" : p.brand}</TableCell><TableCell className="font-medium">{p.name}</TableCell><TableCell>{p.measurement}</TableCell>
+                  <TableCell>{p.brand === "Generic" ? "—" : p.brand}</TableCell><TableCell className="font-medium">{p.name}</TableCell><TableCell>{p.measurement}</TableCell>
                   <TableCell className="text-right">{inr(p.price)}</TableCell><TableCell className="text-right">{out ? "Out" : p.stock}</TableCell>
                   <TableCell>{numIn(p, "boxes", e, out)}</TableCell><TableCell>{numIn(p, "perBox", e, out)}</TableCell>
                   <TableCell><Input className={`h-8 w-24 ${over ? "border-destructive" : ""}`} type="number" min={0} disabled={out} aria-label={`Order qty for ${p.brand} ${p.name} ${p.measurement}`} value={e.qty || ""} onChange={(ev) => setEntry(p._id, { qty: num(ev.target.value) })} /></TableCell>
@@ -184,13 +166,13 @@ export default function NewOrder() {
           <div className="space-y-2 sm:col-span-2"><Label htmlFor="notes">Notes for sales team</Label><Input id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
         </CardContent></Card>
 
-      <Card className="sticky bottom-[5.25rem] z-20 border-primary/30 shadow-lg md:static md:shadow-none"><CardContent className="flex items-center justify-between gap-4 py-4 md:pt-6">
+      <Card><CardContent className="flex flex-wrap items-center justify-between gap-4 pt-6">
         <div className="space-y-1 text-sm">
-          <div className="hidden sm:block">Subtotal: {inr(subtotal)}</div>
-          <div className="hidden sm:block">CD discount ({cd}%): − {inr(cdAmt)}</div>
-          <div className="hidden sm:block">GST: {billType === "gst" ? `+ ${inr(gst)}` : "not applied (non-GST)"}</div>
+          <div>Subtotal: {inr(subtotal)}</div>
+          <div>CD discount ({cd}%): − {inr(cdAmt)}</div>
+          <div>GST: {billType === "gst" ? `+ ${inr(gst)}` : "not applied (non-GST)"}</div>
           <div className="text-lg font-semibold">Total: {inr(total)}</div></div>
-        <Button className="h-11 px-6" disabled={busy}>{busy ? "Saving…" : id ? "Update order" : "Send to sales"}</Button>
+        <Button disabled={busy}>{busy ? "Saving…" : id ? "Update order" : "Send to sales"}</Button>
       </CardContent></Card>
     </form>
   );
