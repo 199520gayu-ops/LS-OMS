@@ -10,10 +10,15 @@ import { api, inr, Product } from "../api";
 const parse = (s: string) => [...new Set(s.split(",").map((x) => x.trim()).filter(Boolean))];
 const GENERAL_SIZES = ["500 ml", "1 ltr", "2 ltr", "3 ltr", "5 ltr", "10 ltr", "20 ltr", "220 ltr"];
 const CATALOG: Record<string, { brands: string[]; names: string[]; sizes: string[] }> = {
-  "Primer": { brands: ["LS", "Aruna", "Asignah"], names: ["Zinc Yellow", "Red Oxide", "Grey", "Wood"], sizes: ["500 ml", "1 ltr", "4 ltr", "20 ltr"] },
+  
+  "LS Paints":{ brands: ["LS"],  names: ["Zinc Yellow", "Red Oxide", "Grey", "Wood"], sizes: ["500 ml", "1 ltr", "4 ltr", "20 ltr"] },
+  "Aruna ":{ brands: ["Aruna"],  names: ["Zinc Yellow", "Red Oxide", "Grey", "Wood"], sizes: ["500 ml", "1 ltr", "4 ltr", "20 ltr"] },
+  "Asignah":{ brands: ["Asignah"],  names: ["Zinc Yellow", "Red Oxide", "Grey", "Wood"], sizes: ["500 ml", "1 ltr", "4 ltr", "20 ltr"] },
   "NC Thinner": { brands: ["GIO"], names: ["NC Thinner"], sizes: ["500 ml", "1 ltr", "5 ltr", "10 ltr", "20 ltr"] },
-  // 800 ml / 900 ml / 950 ml / 1 ltr are the sub-categories of Turpentine Oil (they go in "Product name", not in "Category")
-  "Turpentine Oil": { brands: ["LS", "GIO", "Elite"], names: ["Turpentine Oil 800 ml", "Turpentine Oil 900 ml", "Turpentine Oil 950 ml", "Turpentine Oil 1 ltr"], sizes: ["500 ml", "1 ltr", "2 ltr", "3 ltr", "5 ltr", "10 ltr", "20 ltr", "220 ltr"] },
+  "800 ml": { brands: ["LS", "GIO", "Elite"], names: ["Turpentine Oil"], sizes: ["500 ml", "1 ltr", "2 ltr", "3 ltr", "5 ltr", "10 ltr", "20 ltr"] },
+  "900 ml": { brands: ["LS", "GIO", "Elite"], names: ["Turpentine Oil"], sizes: ["500 ml", "1 ltr", "2 ltr", "3 ltr", "5 ltr", "10 ltr", "20 ltr"] },
+  "950 ml": { brands: ["LS", "GIO", "Elite"], names: ["Turpentine Oil"], sizes: ["500 ml", "1 ltr", "2 ltr", "3 ltr", "5 ltr", "10 ltr", "20 ltr"] },
+  "1 ltr": { brands: ["LS", "GIO", "Elite"], names: ["Turpentine Oil"], sizes: ["500 ml", "1 ltr", "2 ltr", "3 ltr", "5 ltr", "10 ltr", "20 ltr"] },
 };
 const PRESETS = Object.entries(CATALOG).map(([category, c]) => ({ label: category, category, brands: c.brands.join(", "), names: c.names.join(", "), sizes: c.sizes.join(", ") }));
 const selCls = "h-9 w-full rounded-md border bg-background px-3 text-sm disabled:opacity-50";
@@ -41,15 +46,7 @@ export default function Products() {
   const [pick, setPick] = useState(empty);
   useEffect(() => { setPick(editing ? { category: editing.category, brand: editing.brand, name: editing.name, measurement: editing.measurement } : empty); }, [editing]);
   const cat = CATALOG[pick.category];
-  const pickCategory = (c: string) => { // keeps brand / product / size when they are also valid in the new category (handy when fixing old products)
-    const k = CATALOG[c];
-    setPick((p) => ({
-      category: c,
-      brand: k?.brands.includes(p.brand) ? p.brand : k?.brands.length === 1 ? k.brands[0] : "",
-      name: k?.names.includes(p.name) ? p.name : k?.names.length === 1 ? k.names[0] : "",
-      measurement: k && (k.sizes.includes(p.measurement) || GENERAL_SIZES.includes(p.measurement)) ? p.measurement : "",
-    }));
-  };
+  const pickCategory = (c: string) => { const k = CATALOG[c]; setPick({ category: c, brand: k?.brands.length === 1 ? k.brands[0] : "", name: k?.names.length === 1 ? k.names[0] : "", measurement: "" }); };
   const load = () => api<Product[]>("/products").then(setItems).catch((e) => toast.error(e.message));
   useEffect(() => { load(); }, []);
   const shown = items.filter((p) => `${p.category} ${p.brand} ${p.name} ${p.measurement}`.toLowerCase().includes(q.toLowerCase()));
